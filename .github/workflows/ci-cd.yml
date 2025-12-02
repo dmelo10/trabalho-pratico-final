@@ -1,0 +1,155 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  # ETAPA DE COMMIT
+  commit:
+    name: Build e Testes
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # a. Compilação (build) da aplicação
+      - name: Build da aplicação
+        run: |
+          python -m py_compile app.py
+          python -m py_compile models/*.py
+          python -m py_compile services/*.py
+          python -m py_compile database/*.py
+          echo "Build concluído com sucesso!"
+      
+      # b. Testes automatizados
+      # i. Teste de Unidade
+      - name: Executar Testes de Unidade
+        run: |
+          pytest tests/test_models.py tests/test_services.py -v --cov=. --cov-report=term-missing --cov-report=xml
+      
+      # ii. Teste de Integração
+      - name: Executar Testes de Integração
+        run: |
+          pytest tests/test_integration.py -v --cov=. --cov-report=term-missing --cov-report=xml --cov-append
+      
+      - name: Upload cobertura de código
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ETAPA DE TESTE DE ACEITAÇÃO
+  acceptance:
+    name: Testes de Aceitação
+    runs-on: ubuntu-latest
+    needs: commit
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # Teste de aceitação automatizado
+      - name: Executar Testes de Aceitação
+        run: |
+          pytest tests/test_acceptance.py -v --tb=short
+      
+      - name: Verificar requisitos funcionais e não-funcionais
+        run: |
+          echo "Testes de aceitação verificam:"
+          echo "- Requisitos funcionais: CRUD completo de tarefas"
+          echo "- Requisitos não-funcionais: Performance (< 1s para operações básicas)"
+
+  # ETAPA DE LANÇAMENTO
+  release:
+    name: Build Docker e Deploy
+    runs-on: ubuntu-latest
+    needs: [commit, acceptance]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+      
+      # Build da imagem Docker
+      - name: Build da imagem Docker
+        run: |
+          docker build -t task-manager:latest .
+          docker tag task-manager:latest task-manager:${{ github.sha }}
+      
+      - name: Verificar imagem Docker
+        run: |
+          docker images task-manager
+          docker run --rm -d --name test-container -p 5000:5000 task-manager:latest
+          sleep 5
+          curl -f http://localhost:5000/health || exit 1
+          docker stop test-container
+      
+      - name: Login no Docker Hub (opcional)
+        if: false  # Desabilitado por padrão - configure se necessário
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: Push para Docker Hub (opcional)
+        if: false  # Desabilitado por padrão - configure se necessário
+        run: |
+          docker push task-manager:latest
+          docker push task-manager:${{ github.sha }}
+      
+      # Entrega do sistema
+      - name: Preparar artefatos para deploy
+        run: |
+          echo "Sistema pronto para deploy!"
+          echo "Imagem Docker: task-manager:latest"
+          echo "Para executar localmente: docker run -p 5000:5000 task-manager:latest"
+          echo "Para deploy em servidor:"
+          echo "  1. Copiar Dockerfile e código"
+          echo "  2. Executar: docker build -t task-manager ."
+          echo "  3. Executar: docker run -d -p 5000:5000 task-manager"
+      
+      - name: Criar artefato de deploy
+        run: |
+          mkdir -p deploy
+          cp Dockerfile deploy/
+          cp requirements.txt deploy/
+          cp -r app.py models services database templates deploy/
+          tar -czf deploy-package.tar.gz deploy/
+      
+      - name: Upload artefato de deploy
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-package
+          path: deploy-package.tar.gz
+          retention-days: 30
