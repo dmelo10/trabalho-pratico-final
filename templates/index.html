@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Gerenciamento de Tarefas</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        .task-form {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        .task-list {
+            margin-top: 20px;
+        }
+        .task-item {
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .task-item.completed {
+            opacity: 0.6;
+            text-decoration: line-through;
+        }
+        .task-info {
+            flex: 1;
+        }
+        .task-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .task-description {
+            color: #666;
+            font-size: 14px;
+        }
+        .task-actions {
+            display: flex;
+            gap: 10px;
+        }
+        .btn-complete {
+            background: #28a745;
+        }
+        .btn-delete {
+            background: #dc3545;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📋 Sistema de Gerenciamento de Tarefas</h1>
+        
+        <div class="task-form">
+            <h2>Nova Tarefa</h2>
+            <form id="taskForm">
+                <div class="form-group">
+                    <label for="title">Título:</label>
+                    <input type="text" id="title" name="title" required>
+                </div>
+                <div class="form-group">
+                    <label for="description">Descrição:</label>
+                    <textarea id="description" name="description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="category">Categoria:</label>
+                    <select id="category" name="category">
+                        <option value="">Sem categoria</option>
+                        {% for category in categories %}
+                        <option value="{{ category.id }}">{{ category.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit">Adicionar Tarefa</button>
+            </form>
+        </div>
+        
+        <div class="task-list">
+            <h2>Minhas Tarefas</h2>
+            <div id="tasksContainer">
+                {% for task in tasks %}
+                <div class="task-item {% if task.completed %}completed{% endif %}" data-id="{{ task.id }}">
+                    <div class="task-info">
+                        <div class="task-title">{{ task.title }}</div>
+                        {% if task.description %}
+                        <div class="task-description">{{ task.description }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="task-actions">
+                        {% if not task.completed %}
+                        <button class="btn-complete" onclick="completeTask({{ task.id }})">Concluir</button>
+                        {% endif %}
+                        <button class="btn-delete" onclick="deleteTask({{ task.id }})">Excluir</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        document.getElementById('taskForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = {
+                title: document.getElementById('title').value,
+                description: document.getElementById('description').value,
+                category_id: document.getElementById('category').value || null
+            };
+            
+            const response = await fetch('/tasks', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            if (response.ok) {
+                location.reload();
+            }
+        });
+        
+        async function completeTask(taskId) {
+            const response = await fetch(`/tasks/${taskId}/complete`, {
+                method: 'POST'
+            });
+            if (response.ok) {
+                location.reload();
+            }
+        }
+        
+        async function deleteTask(taskId) {
+            if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
+                const response = await fetch(`/tasks/${taskId}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    location.reload();
+                }
+            }
+        }
+    </script>
+</body>
+</html>
+
